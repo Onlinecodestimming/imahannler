@@ -1,13 +1,14 @@
 {
-  "name": "casino-backend",
+  "name": "imahannler",
   "version": "1.0.0",
-  "description": "Backend for Rhema's casino with login, promo unlock, and owner panel",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.0"
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2"
   }
 }
