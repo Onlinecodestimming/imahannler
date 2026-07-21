@@ -1,6 +1,5 @@
-// server.js
-import express from 'express';
-import jwt from 'jsonwebtoken';
+import express from "express";
+import jwt from "jsonwebtoken";
 
 const app = express();
 app.use(express.json());
@@ -10,9 +9,9 @@ const users = {
   rhema: { password: "mypassword", tokens: 100, ownerUnlocked: false }
 };
 
-// Secret keys
-const JWT_SECRET = "super-secret-jwt";
-const OWNER_UNLOCK_CODE = "BIP-OWNER-ACCESS";
+// Secrets (Render will use environment variables)
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+const OWNER_UNLOCK_CODE = process.env.OWNER_UNLOCK_CODE || "BIP-OWNER-ACCESS";
 
 // Middleware: verify login token
 function auth(req, res, next) {
@@ -28,7 +27,7 @@ function auth(req, res, next) {
 }
 
 // Login route
-app.post('/login', (req, res) => {
+app.post("/login", (req, res) => {
   const { username, password } = req.body;
 
   const user = users[username];
@@ -36,23 +35,18 @@ app.post('/login', (req, res) => {
     return res.status(400).json({ error: "Invalid credentials" });
   }
 
-  const token = jwt.sign(
-    { username },
-    JWT_SECRET,
-    { expiresIn: "2h" }
-  );
-
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "2h" });
   res.json({ token });
 });
 
 // Get balance
-app.get('/balance', auth, (req, res) => {
+app.get("/balance", auth, (req, res) => {
   const user = users[req.user.username];
   res.json({ tokens: user.tokens });
 });
 
 // Spin (fake gambling)
-app.post('/spin', auth, (req, res) => {
+app.post("/spin", auth, (req, res) => {
   const user = users[req.user.username];
 
   if (user.tokens < 10) {
@@ -70,7 +64,7 @@ app.post('/spin', auth, (req, res) => {
 });
 
 // Promo code unlocks owner panel
-app.post('/promo', auth, (req, res) => {
+app.post("/promo", auth, (req, res) => {
   const { code } = req.body;
   const user = users[req.user.username];
 
@@ -83,7 +77,7 @@ app.post('/promo', auth, (req, res) => {
 });
 
 // Owner panel commands
-app.post('/owner/command', auth, (req, res) => {
+app.post("/owner/command", auth, (req, res) => {
   const user = users[req.user.username];
 
   if (!user.ownerUnlocked) {
@@ -110,6 +104,8 @@ app.post('/owner/command', auth, (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+// REQUIRED FOR RENDER
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
