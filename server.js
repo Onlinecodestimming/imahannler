@@ -1,137 +1,251 @@
 import express from "express";
+import cors from "cors";
 import jwt from "jsonwebtoken";
 
 const app = express();
-const HOST = process.env.HOST || "0.0.0.0";
-const PORT = Number(process.env.PORT || 3000);
-
-app.use(express.json());
-
-// CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
-
-// In-memory user database
-const users = {}; // { username: { password, tokens, ownerUnlocked } }
-
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
-const OWNER_UNLOCK_CODE = process.env.OWNER_UNLOCK_CODE || "BIP-OWNER-ACCESS";
 
-// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// In-memory users
+// Structure: { username: { password, tokens, role } }
+const users = {};
+
+// Auth middleware
 function auth(req, res, next) {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Not logged in" });
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "No token" });
 
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
     next();
   } catch {
-    res.status(403).json({ error: "Invalid token" });
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
 
 // SIGNUP
 app.post("/signup", (req, res) => {
   const { username, password } = req.body;
-
   if (!username || !password)
-    return res.status(400).json({ error: "Missing username or password" });
-
+    return res.status(400).json({ error: "Missing fields" });
   if (users[username])
-    return res.status(400).json({ error: "User already exists" });
+    return res.status(400).json({ error: "User exists" });
 
   users[username] = {
     password,
     tokens: 100,
-    ownerUnlocked: false
+    role: "user"
   };
 
-  res.json({ message: "User created successfully" });
+  res.json({ message: "User created" });
 });
 
 // LOGIN
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
+  const u = users[username];
+  if (!u || u.password !== password)
+    return res.status(401).json({ error: "Invalid credentials" });
 
-  const user = users[username];
-  if (!user || user.password !== password)
-    return res.status(400).json({ error: "Invalid credentials" });
-
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "2h" });
+  const token = jwt.sign({ username }, JWT_SECRET);
   res.json({ token });
 });
 
 // BALANCE
 app.get("/balance", auth, (req, res) => {
-  const user = users[req.user.username];
-  res.json({ tokens: user.tokens });
+  const u = users[req.user.username];
+  if (!u) return res.status(404).json({ error: "User not found" });
+  res.json({ tokens: u.tokens });
 });
 
-// SPIN
-app.post("/spin", auth, (req, res) => {
-  const user = users[req.user.username];
+// ME
+app.get("/me", auth, (req, res) => {
+  const u = users[req.user.username];
+  if (!u) return res.status(404).json({ error: "User not found" });
 
-  if (user.tokens < 10)
-    return res.status(400).json({ error: "Not enough tokens" });
-
-  user.tokens -= 10;
-
-  const win = Math.random() < 0.3;
-  const payout = win ? 50 : 0;
-
-  user.tokens += payout;
-
-  res.json({ win, payout, tokens: user.tokens });
+  res.json({
+    username: req.user.username,
+    tokens: u.tokens,
+    role: u.role
+  });
 });
 
-// PROMO
-app.post("/promo", auth, (req, res) => {
-  const { code } = req.body;
-  const user = users[req.user.username];
+// GAME TOKEN DELTA
+app.post("/game/apply", auth, (req, res) => {
+  const { delta } = req.body;
+  const u = users[req.user.username];
+  if (!u) return res.status(404).json({ error: "User not found" });
 
-  if (code === OWNER_UNLOCK_CODE) {
-    user.ownerUnlocked = true;
-    return res.json({ message: "Owner panel unlocked!" });
+  u.tokens += Number(delta || 0);
+  if (u.tokens < 0) u.tokens = 0;
+
+  res.json({ tokens: u.tokens });
+});
+
+// ADMIN JSON API: list users
+app.get("/admin/users", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (!["owner", "admin"].includes(me?.role))
+    return res.status(403).json({ error: "Not authorized" });
+
+  const list = Object.entries(users).map(([name, u]) => ({
+    username: name,
+    password: u.password,
+    tokens: u.tokens,
+    role: u.role
+  }));
+
+  res.json({ users: list });
+});
+
+// ADMIN JSON API: set role
+app.post("/admin/setRole", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (me?.role !== "owner")
+    return res.status(403).json({ error: "Only owner can change roles" });
+
+  const { username, role } = req.body;
+  const u = users[username];
+  if (!u) return res.status(404).json({ error: "User not found" });
+
+  u.role = role;
+  res.json({ message: "Role updated", username, role });
+});
+
+// HTML ADMIN PANEL
+app.get("/admin", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (!["owner", "admin"].includes(me?.role))
+    return res.status(403).send("Not authorized");
+
+  let html = `
+  <html>
+  <head>
+    <title>Admin Panel</title>
+    <style>
+      body { background:#111; color:white; font-family:Arial; }
+      table { width:100%; border-collapse:collapse; margin-top:20px; }
+      th, td { border:1px solid #444; padding:10px; }
+      input, select { padding:6px; margin:4px; }
+      button { padding:6px 10px; margin:4px; background:#d4af37; border:none; cursor:pointer; }
+      h1 { color:#d4af37; }
+    </style>
+  </head>
+  <body>
+    <h1>Admin Panel</h1>
+    <table>
+      <tr>
+        <th>Username</th>
+        <th>Password</th>
+        <th>Tokens</th>
+        <th>Role</th>
+        <th>Actions</th>
+      </tr>
+  `;
+
+  for (const [name, u] of Object.entries(users)) {
+    html += `
+      <tr>
+        <td>${name}</td>
+        <td>${u.password}</td>
+        <td>${u.tokens}</td>
+        <td>${u.role}</td>
+        <td>
+          <form method="POST" action="/admin/updateRole" style="display:inline;">
+            <input type="hidden" name="username" value="${name}">
+            <select name="role">
+              <option value="user">user</option>
+              <option value="vip">vip</option>
+              <option value="admin">admin</option>
+              <option value="owner">owner</option>
+            </select>
+            <button type="submit">Set Role</button>
+          </form>
+
+          <form method="POST" action="/admin/updateTokens" style="display:inline;">
+            <input type="hidden" name="username" value="${name}">
+            <input type="number" name="tokens" value="${u.tokens}">
+            <button type="submit">Set Tokens</button>
+          </form>
+
+          <form method="POST" action="/admin/resetPass" style="display:inline;">
+            <input type="hidden" name="username" value="${name}">
+            <input type="text" name="password" placeholder="new pass">
+            <button type="submit">Reset Pass</button>
+          </form>
+
+          <form method="POST" action="/admin/deleteUser" style="display:inline;">
+            <input type="hidden" name="username" value="${name}">
+            <button type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+    `;
   }
 
-  res.status(400).json({ error: "Invalid promo code" });
+  html += `
+    </table>
+  </body>
+  </html>
+  `;
+
+  res.send(html);
 });
 
-// OWNER COMMANDS
-app.post("/owner/command", auth, (req, res) => {
-  const user = users[req.user.username];
+// ADMIN FORM HANDLERS
+app.post("/admin/updateRole", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (me?.role !== "owner") return res.status(403).send("Only owner");
 
-  if (!user.ownerUnlocked)
-    return res.status(403).json({ error: "Owner panel not unlocked" });
+  const { username, role } = req.body;
+  const u = users[username];
+  if (!u) return res.status(404).send("User not found");
 
-  const { command, amount } = req.body;
-
-  switch (command) {
-    case "add_tokens":
-      user.tokens += amount;
-      return res.json({ message: "Tokens added", tokens: user.tokens });
-
-    case "reset_tokens":
-      user.tokens = 0;
-      return res.json({ message: "Tokens reset", tokens: user.tokens });
-
-    case "bonus":
-      user.tokens += 500;
-      return res.json({ message: "Bonus applied", tokens: user.tokens });
-
-    default:
-      return res.status(400).json({ error: "Unknown command" });
-  }
+  u.role = role;
+  res.redirect("/admin");
 });
 
-// HEALTH CHECK
-app.get("/", (req, res) => res.send("ok"));
+app.post("/admin/updateTokens", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (!["owner", "admin"].includes(me?.role))
+    return res.status(403).send("Not allowed");
 
-app.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
+  const { username, tokens } = req.body;
+  const u = users[username];
+  if (!u) return res.status(404).send("User not found");
+
+  u.tokens = parseInt(tokens || "0", 10);
+  res.redirect("/admin");
+});
+
+app.post("/admin/resetPass", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (!["owner", "admin"].includes(me?.role))
+    return res.status(403).send("Not allowed");
+
+  const { username, password } = req.body;
+  const u = users[username];
+  if (!u) return res.status(404).send("User not found");
+
+  u.password = password;
+  res.redirect("/admin");
+});
+
+app.post("/admin/deleteUser", auth, (req, res) => {
+  const me = users[req.user.username];
+  if (me?.role !== "owner") return res.status(403).send("Only owner");
+
+  const { username } = req.body;
+  delete users[username];
+  res.redirect("/admin");
+});
+
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
 });
