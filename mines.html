@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      grid-gap: 8px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .tile {
+      width: 60px;
+      height: 60px;
+      background: #111;
+      border-radius: 10px;
+      border: 1px solid rgba(255,215,0,0.3);
+      text-align: center;
+      line-height: 60px;
+      font-size: 24px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .tile:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 0 12px rgba(255,215,0,0.4);
+    }
+  </style>
+</head>
+<body>
+
+<h1>Mines</h1>
+
+<div class="card" style="text-align:center;">
+  <h3>Bet Amount</h3>
+  <input id="betAmount" type="number" value="10" style="width:120px; text-align:center;">
+  <div style="margin-top:10px;">
+    <button onclick="setBet(10)">+10</button>
+    <button onclick="setBet(50)">+50</button>
+    <button onclick="setBet(100)">+100</button>
+    <button onclick="setBet('max')">MAX</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div style="text-align:center; margin-top:10px;">
+  <button onclick="cashOut()">Cash Out</button>
+</div>
+
+<p id="result" style="text-align:center;"></p>
+
+<script src="../script.js"></script>
+<script>
+requireLogin();
+
+let mines = new Set();
+let revealedSafe = 0;
+let gameOver = false;
+
+async function setBet(amount) {
+  if (amount === 'max') {
+    const me = await getMe();
+    betAmount.value = me.tokens;
+  } else {
+    betAmount.value = Number(betAmount.value) + amount;
+  }
+}
+
+function setupGrid() {
+  grid.innerHTML = "";
+  mines.clear();
+  revealedSafe = 0;
+  gameOver = false;
+  result.innerText = "";
+
+  // place 5 mines randomly
+  while (mines.size < 5) {
+    mines.add(Math.floor(Math.random() * 25));
+  }
+
+  for (let i = 0; i < 25; i++) {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.dataset.index = i;
+    tile.onclick = () => revealTile(i, tile);
+    grid.appendChild(tile);
+  }
+}
+
+async function revealTile(i, tile) {
+  if (gameOver) return;
+  if (tile.dataset.revealed === "1") return;
+
+  tile.dataset.revealed = "1";
+
+  if (mines.has(i)) {
+    tile.innerText = "💣";
+    gameOver = true;
+    const bet = Number(betAmount.value);
+    const data = await applyGameDelta(-bet);
+    result.innerText = `Boom! You hit a mine. (Tokens: ${data.tokens})`;
+  } else {
+    tile.innerText = "💎";
+    revealedSafe++;
+  }
+}
+
+async function cashOut() {
+  if (gameOver) return;
+  const bet = Number(betAmount.value);
+  const mult = 1 + revealedSafe * 0.3; // more safes = higher multiplier
+  const delta = Math.round(bet * mult) - bet;
+
+  const data = await applyGameDelta(delta);
+  result.innerText = `You cashed out at ${mult.toFixed(2)}x (Tokens: ${data.tokens})`;
+  gameOver = true;
+}
+
+setupGrid();
+</script>
+
+<div id="nav"></div>
+<script>
+loadNav("../nav.html");
+</script>
+
+</body>
+</html>

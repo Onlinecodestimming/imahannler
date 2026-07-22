@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spin Wheel — BipCasino</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Spin Wheel</h1>
+<p class="subtitle">Bet 10 tokens &middot; ~30% chance to win 4x</p>
+
+<div class="page-wrap">
+  <div class="card">
+    <div class="wheel-wrap">
+      <div class="wheel-pointer"></div>
+      <div class="wheel" id="wheel"></div>
+    </div>
+    <p class="result-banner" id="result"></p>
+    <button id="spinBtn" onclick="doSpin()" style="width:100%;">Spin (10 tokens)</button>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="../script.js"></script>
+<script>
+  (async () => {
+    await requireLogin();
+    await renderTokenBox();
+    await loadNav("../nav.html");
+  })();
+
+  let spinning = false;
+  let rotation = 0;
+
+  async function doSpin() {
+    if (spinning) return;
+    const btn = document.getElementById("spinBtn");
+    const result = document.getElementById("result");
+    const wheel = document.getElementById("wheel");
+
+    result.className = "result-banner";
+    result.innerText = "";
+    btn.disabled = true;
+    spinning = true;
+
+    const data = await playSpin();
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      btn.disabled = false;
+      spinning = false;
+      return;
+    }
+
+    bumpTokenBox(data.tokens);
+
+    rotation += Math.floor(Math.random() * 360) + 720;
+    wheel.style.transform = `rotate(${rotation}deg)`;
+
+    setTimeout(() => {
+      if (data.win) {
+        result.className = "result-banner win";
+        result.innerText = `You won ${data.payout} tokens!`;
+      } else {
+        result.className = "result-banner lose";
+        result.innerText = "No luck this time.";
+      }
+      btn.disabled = false;
+      spinning = false;
+    }, 3200);
+  }
+</script>
+</body>
+</html>

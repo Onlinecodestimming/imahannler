@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slots — BipCasino</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Slots</h1>
+<p class="subtitle">Bet 10 tokens &middot; pairs pay 1.5x &middot; triples pay 4x &middot; triple 7s pay 10x</p>
+
+<div class="page-wrap">
+  <div class="card">
+    <div class="slot-row">
+      <div class="reel-window" id="w1"><div class="reel-strip" id="s1"></div></div>
+      <div class="reel-window" id="w2"><div class="reel-strip" id="s2"></div></div>
+      <div class="reel-window" id="w3"><div class="reel-strip" id="s3"></div></div>
+    </div>
+    <p class="result-banner" id="result"></p>
+    <button id="spinBtn" onclick="doSpin()" style="width:100%;">Spin (10 tokens)</button>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="../script.js"></script>
+<script>
+  (async () => {
+    await requireLogin();
+    await renderTokenBox();
+    await loadNav("../nav.html");
+  })();
+
+  const ICONS = ["cherry", "star", "gem", "seven"];
+  const ICON_MAP = { cherry: "🍒", star: "⭐", gem: "💎", seven: "7️⃣" };
+  const CELL_HEIGHT = 78;
+  let spinning = false;
+
+  function randomIcon() {
+    return ICONS[Math.floor(Math.random() * ICONS.length)];
+  }
+
+  // Build a reel strip: a run of random filler icons, ending on the target icon.
+  function buildStrip(stripEl, targetIcon, extraCells) {
+    const sequence = [];
+    for (let i = 0; i < extraCells; i++) sequence.push(randomIcon());
+    sequence.push(targetIcon);
+
+    stripEl.style.transition = "none";
+    stripEl.style.transform = "translateY(0)";
+    stripEl.innerHTML = sequence.map(icon => `<div class="cell">${ICON_MAP[icon]}</div>`).join("");
+
+    // Force reflow so the "none" transition actually applies before we animate.
+    void stripEl.offsetHeight;
+
+    const finalOffset = (sequence.length - 1) * CELL_HEIGHT;
+    requestAnimationFrame(() => {
+      stripEl.style.transition = "";
+      stripEl.style.transform = `translateY(-${finalOffset}px)`;
+    });
+  }
+
+  async function doSpin() {
+    if (spinning) return;
+    const btn = document.getElementById("spinBtn");
+    const result = document.getElementById("result");
+    const strips = [document.getElementById("s1"), document.getElementById("s2"), document.getElementById("s3")];
+
+    result.className = "result-banner";
+    result.innerText = "";
+    btn.disabled = true;
+    spinning = true;
+
+    const data = await playSlots();
+
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      btn.disabled = false;
+      spinning = false;
+      return;
+    }
+
+    bumpTokenBox(data.tokens);
+
+    // Each reel spins a different length so they don't all land in lockstep.
+    const extraCells = [14, 18, 22];
+    strips.forEach((strip, i) => buildStrip(strip, data.reels[i], extraCells[i]));
+
+    setTimeout(() => {
+      if (data.result === "jackpot") {
+        result.className = "result-banner win";
+        result.innerText = `JACKPOT! You won ${data.payout} tokens!`;
+      } else if (data.result === "pair") {
+        result.className = "result-banner win";
+        result.innerText = `Pair! You won ${data.payout} tokens.`;
+      } else {
+        result.className = "result-banner lose";
+        result.innerText = "No match — try again.";
+      }
+      btn.disabled = false;
+      spinning = false;
+    }, 2300);
+  }
+</script>
+</body>
+</html>

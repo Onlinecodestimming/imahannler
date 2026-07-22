@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .plinko-board {
+      width: 260px;
+      height: 260px;
+      margin: 30px auto;
+      background: #111;
+      border-radius: 14px;
+      border: 1px solid rgba(255,215,0,0.3);
+      position: relative;
+    }
+    .slot-row {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: space-around;
+    }
+    .slot {
+      width: 40px;
+      height: 20px;
+      background: #222;
+      border-radius: 6px;
+      border: 1px solid #d4af37;
+      text-align: center;
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .ball {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #d4af37;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      transition: top 1.5s ease-out, left 1.5s ease-out;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Plinko</h1>
+
+<div class="card" style="text-align:center;">
+  <h3>Bet Amount</h3>
+  <input id="betAmount" type="number" value="10" style="width:120px; text-align:center;">
+  <div style="margin-top:10px;">
+    <button onclick="setBet(10)">+10</button>
+    <button onclick="setBet(50)">+50</button>
+    <button onclick="setBet(100)">+100</button>
+    <button onclick="setBet('max')">MAX</button>
+  </div>
+</div>
+
+<div class="plinko-board">
+  <div id="ball" class="ball"></div>
+  <div class="slot-row">
+    <div class="slot" data-mult="0">0x</div>
+    <div class="slot" data-mult="0.5">0.5x</div>
+    <div class="slot" data-mult="1">1x</div>
+    <div class="slot" data-mult="2">2x</div>
+    <div class="slot" data-mult="5">5x</div>
+  </div>
+</div>
+
+<p id="result" style="text-align:center;"></p>
+
+<script src="../script.js"></script>
+<script>
+requireLogin();
+
+async function setBet(amount) {
+  if (amount === 'max') {
+    const me = await getMe();
+    betAmount.value = me.tokens;
+  } else {
+    betAmount.value = Number(betAmount.value) + amount;
+  }
+}
+
+function playPlinko() {
+  const ball = document.getElementById("ball");
+  const slots = document.querySelectorAll(".slot");
+  const index = Math.floor(Math.random() * slots.length);
+  const target = slots[index];
+
+  const rectBoard = document.querySelector(".plinko-board").getBoundingClientRect();
+  const rectSlot = target.getBoundingClientRect();
+
+  const left = rectSlot.left - rectBoard.left + rectSlot.width / 2 - 8;
+  const top = rectBoard.height - 40;
+
+  ball.style.top = top + "px";
+  ball.style.left = left + "px";
+
+  setTimeout(async () => {
+    const mult = Number(target.dataset.mult);
+    const bet = Number(betAmount.value);
+    const delta = Math.round(bet * mult) - bet; // cost bet, payout mult*bet
+
+    const data = await applyGameDelta(delta);
+    result.innerText = `Slot: ${mult}x | Tokens: ${data.tokens}`;
+  }, 1600);
+}
+</script>
+
+<div style="text-align:center; margin-top:10px;">
+  <button onclick="playPlinko()">DROP BALL</button>
+</div>
+
+<div id="nav"></div>
+<script>
+loadNav("../nav.html");
+</script>
+
+</body>
+</html>

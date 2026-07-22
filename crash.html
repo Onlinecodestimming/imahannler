@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .crash-bar {
+      width: 80%;
+      height: 40px;
+      margin: 40px auto;
+      background: #111;
+      border-radius: 10px;
+      border: 1px solid rgba(255,215,0,0.3);
+      position: relative;
+    }
+    .crash-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg,#d4af37,#b8860b);
+      border-radius: 10px;
+      transition: width 0.1s linear;
+    }
+    #multText {
+      text-align:center;
+      font-size:24px;
+      color:#d4af37;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Crash</h1>
+
+<div class="card" style="text-align:center;">
+  <h3>Bet Amount</h3>
+  <input id="betAmount" type="number" value="10" style="width:120px; text-align:center;">
+  <div style="margin-top:10px;">
+    <button onclick="setBet(10)">+10</button>
+    <button onclick="setBet(50)">+50</button>
+    <button onclick="setBet(100)">+100</button>
+    <button onclick="setBet('max')">MAX</button>
+  </div>
+</div>
+
+<div class="crash-bar">
+  <div id="crashFill" class="crash-fill"></div>
+</div>
+<p id="multText">1.00x</p>
+
+<div style="text-align:center;">
+  <button id="startBtn" onclick="startCrash()">START</button>
+  <button id="cashoutBtn" onclick="cashOut()" disabled>CASH OUT</button>
+</div>
+
+<p id="result" style="text-align:center;"></p>
+
+<script src="../script.js"></script>
+<script>
+requireLogin();
+
+let currentMult = 1.0;
+let crashed = false;
+let intervalId = null;
+let cashedOut = false;
+
+async function setBet(amount) {
+  if (amount === 'max') {
+    const me = await getMe();
+    betAmount.value = me.tokens;
+  } else {
+    betAmount.value = Number(betAmount.value) + amount;
+  }
+}
+
+function startCrash() {
+  currentMult = 1.0;
+  crashed = false;
+  cashedOut = false;
+  result.innerText = "";
+  crashFill.style.width = "0%";
+  multText.innerText = "1.00x";
+
+  startBtn.disabled = true;
+  cashoutBtn.disabled = false;
+
+  const crashPoint = 1 + Math.random() * 10; // random crash between 1x and 11x
+
+  intervalId = setInterval(() => {
+    if (crashed) return;
+
+    currentMult += 0.05;
+    const percent = Math.min((currentMult / crashPoint) * 100, 100);
+    crashFill.style.width = percent + "%";
+    multText.innerText = currentMult.toFixed(2) + "x";
+
+    if (currentMult >= crashPoint) {
+      crashed = true;
+      cashoutBtn.disabled = true;
+      startBtn.disabled = false;
+      clearInterval(intervalId);
+      handleCrash(false);
+    }
+  }, 100);
+}
+
+async function cashOut() {
+  if (crashed || cashedOut) return;
+  cashedOut = true;
+  crashed = true;
+  cashoutBtn.disabled = true;
+  startBtn.disabled = false;
+  clearInterval(intervalId);
+  handleCrash(true);
+}
+
+async function handleCrash(won) {
+  const bet = Number(betAmount.value);
+  let delta = -bet;
+
+  if (won) {
+    delta = Math.round(bet * currentMult) - bet;
+  }
+
+  const data = await applyGameDelta(delta);
+  result.innerText = (won ? "You cashed out at " + currentMult.toFixed(2) + "x!" : "Crashed!") +
+                     ` (Tokens: ${data.tokens})`;
+}
+</script>
+
+<div id="nav"></div>
+<script>
+loadNav("../nav.html");
+</script>
+
+</body>
+</html>

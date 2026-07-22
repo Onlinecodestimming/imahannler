@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blackjack — BipCasino</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Blackjack</h1>
+<p class="subtitle">Bet 10 tokens &middot; blackjack pays 2.5x &middot; win pays 2x &middot; push returns your bet</p>
+
+<div class="page-wrap">
+  <div class="card">
+    <h2>Dealer</h2>
+    <div class="hand-row" id="dealerHand"></div>
+    <p class="hand-total" id="dealerTotal">Total: ?</p>
+
+    <h2>You</h2>
+    <div class="hand-row" id="playerHand"></div>
+    <p class="hand-total" id="playerTotal">Total: 0</p>
+
+    <p class="result-banner" id="result"></p>
+
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button id="dealBtn" onclick="doDeal()" style="flex:1;">Deal (10 tokens)</button>
+      <button id="hitBtn" onclick="doHit()" style="flex:1;" disabled>Hit</button>
+      <button id="standBtn" class="secondary" onclick="doStand()" style="flex:1;" disabled>Stand</button>
+    </div>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="../script.js"></script>
+<script>
+  (async () => {
+    await requireLogin();
+    await renderTokenBox();
+    await loadNav("../nav.html");
+  })();
+
+  // Face-value cards don't distinguish 10/J/Q/K suits since the backend
+  // only tracks blackjack point value — show a generic "10" face instead.
+  // Suits are assigned client-side just for visual variety (not gameplay).
+  const SUITS = ["♠", "♥", "♦", "♣"];
+  function cardFace(v) {
+    if (v === 11) return "A";
+    if (v === 10) return "10";
+    return String(v);
+  }
+  function suitFor(index) {
+    return SUITS[index % SUITS.length];
+  }
+
+  // Renders a hand, only animating cards beyond `alreadyShown` (so re-renders
+  // after a hit don't replay the deal animation on cards already on the table).
+  function renderHand(elId, cards, { hideIndex = -1, alreadyShown = 0 } = {}) {
+    const el = document.getElementById(elId);
+    el.innerHTML = cards.map((c, i) => {
+      const isHidden = i === hideIndex;
+      const suit = suitFor(i);
+      const red = suit === "♥" || suit === "♦";
+      const delay = i >= alreadyShown ? `${(i - alreadyShown) * 0.12}s` : "0s";
+      const faceDownClass = isHidden ? "face-down" : "";
+      return `
+        <div class="card-slot ${faceDownClass}" style="--delay:${delay}">
+          <div class="card-inner" style="animation-delay:${delay}">
+            <div class="card-face ${red ? "red-suit" : ""}">${cardFace(c)}${suit}</div>
+            <div class="card-back"></div>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  // Flips the dealer's hole card face-up in place (used when the round ends).
+  function revealHoleCard(elId) {
+    const el = document.getElementById(elId);
+    const slot = el.querySelector(".card-slot.face-down");
+    if (slot) {
+      slot.classList.add("flip");
+    }
+  }
+
+  function setButtons({ deal, hit, stand }) {
+    document.getElementById("dealBtn").disabled = !deal;
+    document.getElementById("hitBtn").disabled = !hit;
+    document.getElementById("standBtn").disabled = !stand;
+  }
+
+  async function doDeal() {
+    const result = document.getElementById("result");
+    result.className = "result-banner";
+    result.innerText = "";
+    setButtons({ deal: false, hit: false, stand: false });
+
+    const data = await blackjackDeal();
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      setButtons({ deal: true, hit: false, stand: false });
+      return;
+    }
+    bumpTokenBox(data.tokens);
+
+    if (data.status === "blackjack") {
+      renderHand("playerHand", data.player);
+      renderHand("dealerHand", data.dealer);
+      document.getElementById("playerTotal").innerText = `Total: ${data.playerTotal}`;
+      document.getElementById("dealerTotal").innerText = `Total: ${data.dealerTotal}`;
+      result.className = "result-banner win";
+      result.innerText = `Blackjack! You won ${data.payout} tokens!`;
+      setButtons({ deal: true, hit: false, stand: false });
+      return;
+    }
+
+    renderHand("playerHand", data.player);
+    renderHand("dealerHand", [data.dealerUpcard, 0], { hideIndex: 1 });
+    document.getElementById("playerTotal").innerText = `Total: ${data.playerTotal}`;
+    document.getElementById("dealerTotal").innerText = "Total: ?";
+    setButtons({ deal: false, hit: true, stand: true });
+  }
+
+  async function doHit() {
+    const result = document.getElementById("result");
+    const data = await blackjackHit();
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      return;
+    }
+    bumpTokenBox(data.tokens);
+    renderHand("playerHand", data.player, { alreadyShown: data.player.length - 1 });
+    document.getElementById("playerTotal").innerText = `Total: ${data.playerTotal}`;
+
+    if (data.status === "bust") {
+      revealHoleCard("dealerHand");
+      setTimeout(() => {
+        renderHand("dealerHand", data.dealer, { alreadyShown: data.dealer.length });
+        document.getElementById("dealerTotal").innerText = `Total: ${data.dealerTotal}`;
+      }, 300);
+      result.className = "result-banner lose";
+      result.innerText = "Bust! Dealer wins.";
+      setButtons({ deal: true, hit: false, stand: false });
+    }
+  }
+
+  async function doStand() {
+    const result = document.getElementById("result");
+    const data = await blackjackStand();
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      return;
+    }
+    bumpTokenBox(data.tokens);
+    document.getElementById("playerTotal").innerText = `Total: ${data.playerTotal}`;
+
+    // Flip the hole card first, then deal in any cards the dealer drew
+    // after standing (17-and-under rule), so it reads as a real sequence.
+    revealHoleCard("dealerHand");
+    setTimeout(() => {
+      renderHand("dealerHand", data.dealer, { alreadyShown: 2 });
+      document.getElementById("dealerTotal").innerText = `Total: ${data.dealerTotal}`;
+    }, 350);
+
+    const messages = {
+      win: `You won ${data.payout} tokens!`,
+      lose: "Dealer wins.",
+      push: `Push — your ${data.payout} token bet is returned.`
+    };
+    result.className = "result-banner " + (data.status === "lose" ? "lose" : "win");
+    result.innerText = messages[data.status] || "";
+    setButtons({ deal: true, hit: false, stand: false });
+  }
+</script>
+</body>
+</html>

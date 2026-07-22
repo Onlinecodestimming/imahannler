@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coinflip — BipCasino</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Coinflip</h1>
+<p class="subtitle">Bet 10 tokens &middot; 50/50 &middot; 2x payout</p>
+
+<div class="page-wrap">
+  <div class="card">
+    <div class="coin" id="coin">?</div>
+    <p class="result-banner" id="result"></p>
+
+    <div class="bet-row">
+      <button id="headsBtn" onclick="doFlip('heads')">Heads</button>
+      <button id="tailsBtn" class="secondary" onclick="doFlip('tails')">Tails</button>
+    </div>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="../script.js"></script>
+<script>
+  (async () => {
+    await requireLogin();
+    await renderTokenBox();
+    await loadNav("../nav.html");
+  })();
+
+  let flipping = false;
+
+  async function doFlip(guess) {
+    if (flipping) return;
+    flipping = true;
+    document.getElementById("headsBtn").disabled = true;
+    document.getElementById("tailsBtn").disabled = true;
+
+    const coin = document.getElementById("coin");
+    const result = document.getElementById("result");
+    result.className = "result-banner";
+    result.innerText = "";
+    coin.style.transform = "rotateY(720deg)";
+
+    const data = await playCoinflip(guess);
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      flipping = false;
+      document.getElementById("headsBtn").disabled = false;
+      document.getElementById("tailsBtn").disabled = false;
+      coin.style.transform = "none";
+      return;
+    }
+
+    bumpTokenBox(data.tokens);
+
+    setTimeout(() => {
+      coin.style.transform = "none";
+      coin.innerText = data.result === "heads" ? "HEADS" : "TAILS";
+      if (data.win) {
+        result.className = "result-banner win";
+        result.innerText = `It's ${data.result} — you won ${data.payout} tokens!`;
+      } else {
+        result.className = "result-banner lose";
+        result.innerText = `It's ${data.result} — no win.`;
+      }
+      flipping = false;
+      document.getElementById("headsBtn").disabled = false;
+      document.getElementById("tailsBtn").disabled = false;
+    }, 650);
+  }
+</script>
+</body>
+</html>

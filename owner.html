@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — BipCasino</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Admin Panel</h1>
+<p class="subtitle" id="roleLabel"></p>
+
+<div class="page-wrap" style="max-width: 720px;">
+  <div class="card">
+    <button onclick="loadUsers()">Refresh users</button>
+    <p id="listStatus" class="error-msg"></p>
+    <div id="usersWrap"></div>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="/script.js"></script>
+<script>
+let me = null;
+
+(async () => {
+  me = await requireStaff();
+  if (!me) return;
+  document.getElementById("roleLabel").innerText = `Signed in as ${me.username} (${me.role})`;
+  await renderTokenBox();
+  await loadNav();
+  await loadUsers();
+})();
+
+async function loadUsers() {
+  const wrap = document.getElementById("usersWrap");
+  const status = document.getElementById("listStatus");
+  status.innerText = "";
+
+  const data = await getAllUsers();
+  if (!data.users) {
+    status.innerText = data.error || "Not authorized.";
+    wrap.innerHTML = "";
+    return;
+  }
+
+  const isOwner = me.role === "owner";
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Username</th><th>Tokens</th><th>Role</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        ${data.users.map(u => renderRow(u, isOwner)).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderRow(u, isOwner) {
+  const lockedForAdmin = u.role === "owner" && !isOwner;
+  const roleOptions = ["user", "vip", "admin", "owner"]
+    .map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`)
+    .join("");
+
+  return `
+    <tr>
+      <td class="mono">${escapeHtml(u.username)}</td>
+      <td class="mono">${u.tokens}</td>
+      <td><span class="role-badge ${u.role}">${u.role}</span></td>
+      <td>
+        <div class="admin-row-actions">
+          <input type="number" id="tok-${cssSafe(u.username)}" placeholder="tokens" value="${u.tokens}" style="width:90px;">
+          <button class="secondary" ${lockedForAdmin ? "disabled" : ""} onclick="doSetTokens('${jsSafe(u.username)}')">Set tokens</button>
+
+          <input type="password" id="pass-${cssSafe(u.username)}" placeholder="new password" style="width:120px;">
+          <button class="secondary" ${lockedForAdmin ? "disabled" : ""} onclick="doSetPassword('${jsSafe(u.username)}')">Reset password</button>
+
+          ${isOwner ? `
+            <select id="role-${cssSafe(u.username)}">${roleOptions}</select>
+            <button class="secondary" onclick="doSetRole('${jsSafe(u.username)}')">Set role</button>
+            <button class="danger" onclick="doDelete('${jsSafe(u.username)}')">Delete</button>
+          ` : ""}
+        </div>
+        <p class="muted" id="msg-${cssSafe(u.username)}" style="margin:6px 0 0;"></p>
+      </td>
+    </tr>
+  `;
+}
+
+async function doSetTokens(username) {
+  const input = document.getElementById(`tok-${cssSafe(username)}`);
+  const msg = document.getElementById(`msg-${cssSafe(username)}`);
+  const data = await setUserTokens(username, input.value);
+  msg.innerText = data.message ? `Tokens set to ${data.tokens}.` : data.error;
+  if (data.message) await loadUsers();
+}
+
+async function doSetPassword(username) {
+  const input = document.getElementById(`pass-${cssSafe(username)}`);
+  const msg = document.getElementById(`msg-${cssSafe(username)}`);
+  if (!input.value) {
+    msg.innerText = "Enter a new password first.";
+    return;
+  }
+  const data = await setUserPassword(username, input.value);
+  msg.innerText = data.message ? "Password updated." : data.error;
+  if (data.message) input.value = "";
+}
+
+async function doSetRole(username) {
+  const select = document.getElementById(`role-${cssSafe(username)}`);
+  const msg = document.getElementById(`msg-${cssSafe(username)}`);
+  const data = await setUserRole(username, select.value);
+  msg.innerText = data.message ? `Role set to ${data.role}.` : data.error;
+  if (data.message) await loadUsers();
+}
+
+async function doDelete(username) {
+  if (!confirm(`Delete ${username}? This can't be undone.`)) return;
+  const data = await deleteUser(username);
+  if (data.message) {
+    await loadUsers();
+  } else {
+    alert(data.error);
+  }
+}
+
+function cssSafe(s) { return s.replace(/[^a-zA-Z0-9_-]/g, "_"); }
+function jsSafe(s) { return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.innerText = s;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

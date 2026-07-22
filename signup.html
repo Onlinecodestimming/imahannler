@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign up — BipCasino</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="center-title-row">
+  <h1 style="margin:0;">Create account</h1>
+</div>
+
+<div class="page-wrap">
+  <div class="card">
+    <label for="newUser">Username</label>
+    <input id="newUser" placeholder="3-20 characters" autocomplete="username">
+
+    <label for="newPass">Password</label>
+    <input id="newPass" placeholder="At least 4 characters" type="password" autocomplete="new-password">
+
+    <button id="signupBtn" onclick="doSignup()" style="width:100%; margin-top:14px;">Sign up</button>
+    <p id="status" class="error-msg"></p>
+    <p class="muted">Already have an account? <a href="/login.html" style="color: var(--violet);">Log in</a></p>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="/script.js"></script>
+<script>
+  redirectIfLoggedIn();
+  loadNav();
+
+  async function doSignup() {
+    const btn = document.getElementById("signupBtn");
+    const status = document.getElementById("status");
+    if (!newUser.value || !newPass.value) {
+      status.innerText = "Enter a username and password.";
+      return;
+    }
+    btn.disabled = true;
+    btn.innerText = "Creating account…";
+
+    const data = await signup(newUser.value.trim(), newPass.value);
+    if (data.error) {
+      status.innerText = data.error;
+      btn.disabled = false;
+      btn.innerText = "Sign up";
+      return;
+    }
+
+    const loginData = await login(newUser.value.trim(), newPass.value);
+    if (loginData.token) {
+      window.location.href = "/index.html";
+    } else {
+      status.innerText = loginData.error || "Account created — please log in.";
+      btn.disabled = false;
+      btn.innerText = "Sign up";
+    }
+  }
+
+  document.getElementById("newPass").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSignup();
+  });
+</script>
+</body>
+</html>

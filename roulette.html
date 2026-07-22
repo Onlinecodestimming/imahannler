@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roulette — BipCasino</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<div id="tokenBox">Loading…</div>
+
+<h1>Roulette</h1>
+<p class="subtitle">Bet 10 tokens &middot; red/black pay 2x &middot; green pays 14x</p>
+
+<div class="page-wrap">
+  <div class="card">
+    <div class="roulette-wrap">
+      <div class="roulette-wheel" id="wheel"></div>
+      <div class="roulette-ball" id="ball"></div>
+      <div class="roulette-result" id="wheelResult" style="opacity:0;">?</div>
+    </div>
+    <p class="result-banner" id="result"></p>
+
+    <div class="bet-row">
+      <button onclick="doBet('red')" style="background: linear-gradient(135deg, var(--coral), #d43a56);">Red</button>
+      <button class="secondary" onclick="doBet('black')">Black</button>
+      <button onclick="doBet('green')" style="background: linear-gradient(135deg, var(--cyan), #2bc9a8); color:#0a0a0f;">Green</button>
+    </div>
+  </div>
+</div>
+
+<div id="nav"></div>
+
+<script src="../script.js"></script>
+<script>
+  (async () => {
+    await requireLogin();
+    await renderTokenBox();
+    await loadNav("../nav.html");
+  })();
+
+  let spinning = false;
+  let wheelRotation = 0;
+  let ballRotation = 0;
+
+  async function doBet(guess) {
+    if (spinning) return;
+    spinning = true;
+    document.querySelectorAll(".bet-row button").forEach(b => b.disabled = true);
+
+    const wheel = document.getElementById("wheel");
+    const ball = document.getElementById("ball");
+    const box = document.getElementById("wheelResult");
+    const result = document.getElementById("result");
+
+    box.style.opacity = "0";
+    result.className = "result-banner";
+    result.innerText = "";
+
+    const data = await playRoulette(guess);
+    if (data.error) {
+      result.className = "result-banner lose";
+      result.innerText = data.error;
+      spinning = false;
+      document.querySelectorAll(".bet-row button").forEach(b => b.disabled = false);
+      return;
+    }
+
+    bumpTokenBox(data.tokens);
+
+    // Spin the wheel one way and the ball the other, for a few full turns each.
+    wheelRotation += 360 * 3 + Math.floor(Math.random() * 360);
+    ballRotation -= 360 * 5 + Math.floor(Math.random() * 360);
+    wheel.style.transform = `rotate(${wheelRotation}deg)`;
+    ball.style.transform = `rotate(${ballRotation}deg)`;
+
+    setTimeout(() => {
+      box.className = "roulette-result " + data.color;
+      box.innerText = data.roll;
+      box.style.opacity = "1";
+
+      if (data.win) {
+        result.className = "result-banner win";
+        result.innerText = `${data.roll} (${data.color}) — you won ${data.payout} tokens!`;
+      } else {
+        result.className = "result-banner lose";
+        result.innerText = `${data.roll} (${data.color}) — no win.`;
+      }
+      spinning = false;
+      document.querySelectorAll(".bet-row button").forEach(b => b.disabled = false);
+    }, 2650);
+  }
+</script>
+</body>
+</html>
