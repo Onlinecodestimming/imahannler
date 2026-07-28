@@ -13,20 +13,21 @@ header {
   align-items: center;
 }
 
-#user-info input {
+#auth input {
   padding: 6px 10px;
   border-radius: 6px;
   border: none;
+  margin-right: 6px;
 }
 
-#user-info button {
-  margin-left: 8px;
+#auth button {
   padding: 6px 12px;
   border-radius: 6px;
   border: none;
   background: #3b82f6;
   color: #fff;
   cursor: pointer;
+  margin-right: 4px;
 }
 
 main {
