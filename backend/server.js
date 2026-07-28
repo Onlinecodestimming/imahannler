@@ -22,19 +22,21 @@ function getDriveClient() {
 }
 
 const FOLDER_ID = process.env.GOOGLE_FOLDER_ID;
-const FILE_NAME = "tokens.json";
+const TOKENS_FILE = "tokens.json";
+const USERS_FILE = "users.json";
 
-async function loadTokens() {
+// ===== GENERIC DRIVE FILE LOAD/SAVE =====
+
+async function loadFile(name) {
     const drive = getDriveClient();
 
     const res = await drive.files.list({
-        q: `'${FOLDER_ID}' in parents and name='${FILE_NAME}'`,
-        fields: "files(id, name)"
+        q: `'${FOLDER_ID}' in parents and name='${name}'`,
+        fields: "files(id)"
     });
 
     if (!res.data.files.length) {
-        console.log("tokens.json not found, creating new file...");
-        await saveTokens({});
+        await saveFile(name, {});
         return {};
     }
 
@@ -48,15 +50,15 @@ async function loadTokens() {
     return fileRes.data || {};
 }
 
-async function saveTokens(tokens) {
+async function saveFile(name, data) {
     const drive = getDriveClient();
 
     const res = await drive.files.list({
-        q: `'${FOLDER_ID}' in parents and name='${FILE_NAME}'`,
+        q: `'${FOLDER_ID}' in parents and name='${name}'`,
         fields: "files(id)"
     });
 
-    const fileContent = Buffer.from(JSON.stringify(tokens, null, 2));
+    const fileContent = Buffer.from(JSON.stringify(data, null, 2));
 
     if (res.data.files.length) {
         const fileId = res.data.files[0].id;
@@ -71,7 +73,7 @@ async function saveTokens(tokens) {
     } else {
         await drive.files.create({
             requestBody: {
-                name: FILE_NAME,
+                name,
                 parents: [FOLDER_ID]
             },
             media: {
@@ -82,45 +84,17 @@ async function saveTokens(tokens) {
     }
 }
 
-async function applyTokenChange(userId, amount) {
-    const tokens = await loadTokens();
+// ===== USER SYSTEM =====
 
-    if (!tokens[userId]) {
-        tokens[userId] = { tokens: 0 };
-    }
-
-    tokens[userId].tokens += amount;
-
-    await saveTokens(tokens);
-
-    return tokens[userId].tokens;
+async function loadUsers() {
+    return await loadFile(USERS_FILE);
 }
 
-// ===== API ROUTES =====
+async function saveUsers(users) {
+    return await saveFile(USERS_FILE, users);
+}
 
-app.get("/tokens/:userId", async (req, res) => {
-    try {
-        const userId = req.params.userId;
-        const tokens = await loadTokens();
-        const balance = tokens[userId]?.tokens || 0;
-        res.json({ userId, balance });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load tokens" });
-    }
-});
+// ===== TOKEN SYSTEM =====
 
-app.post("/tokens/add", async (req, res) => {
-    try {
-        const { userId, amount } = req.body;
-        const newBalance = await applyTokenChange(userId, amount);
-        res.json({ userId, balance: newBalance });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to update tokens" });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`Backend running on port ${PORT}`);
-});
+async function loadTokens() {
+    return await
