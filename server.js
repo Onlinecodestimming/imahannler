@@ -22,31 +22,20 @@ app.use(
 
 app.use(express.json());
 
-// JSON file path (inside repo)
 const dataFilePath = path.resolve(process.env.DATA_FILE || "./data/users.json");
 
-// Helpers
 function readUsers() {
   try {
     const raw = fs.readFileSync(dataFilePath, "utf-8");
     const parsed = JSON.parse(raw);
     return parsed.users || [];
-  } catch (err) {
-    console.error("Error reading users:", err);
+  } catch {
     return [];
   }
 }
 
 function writeUsers(users) {
-  try {
-    fs.writeFileSync(
-      dataFilePath,
-      JSON.stringify({ users }, null, 2),
-      "utf-8"
-    );
-  } catch (err) {
-    console.error("Error writing users:", err);
-  }
+  fs.writeFileSync(dataFilePath, JSON.stringify({ users }, null, 2), "utf-8");
 }
 
 function findUser(username) {
@@ -70,13 +59,12 @@ function isValidUsername(username) {
   );
 }
 
-// Routes
-
 app.get("/", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Owner login
+// OWNER
+
 app.post("/owner-login", (req, res) => {
   const { username } = req.body;
   if (!isValidUsername(username))
@@ -88,7 +76,6 @@ app.post("/owner-login", (req, res) => {
   return res.status(401).json({ success: false, message: "Access denied." });
 });
 
-// Owner panel
 app.get("/owner-panel", (req, res) => {
   const { username } = req.query;
   if (username !== process.env.OWNER_USERNAME)
@@ -118,7 +105,8 @@ app.get("/owner-panel", (req, res) => {
   });
 });
 
-// Register
+// AUTH
+
 app.post("/user/register", (req, res) => {
   const { username } = req.body;
   if (!isValidUsername(username))
@@ -135,11 +123,9 @@ app.post("/user/register", (req, res) => {
   };
 
   upsertUser(newUser);
-
   res.json({ success: true, user: newUser });
 });
 
-// Login
 app.post("/user/login", (req, res) => {
   const { username } = req.body;
   if (!isValidUsername(username))
@@ -155,7 +141,8 @@ app.post("/user/login", (req, res) => {
   res.json({ success: true, user });
 });
 
-// Get tokens
+// USER DATA
+
 app.get("/user/tokens", (req, res) => {
   const { username } = req.query;
   const user = findUser(username);
@@ -165,7 +152,6 @@ app.get("/user/tokens", (req, res) => {
   res.json({ success: true, tokens: user.tokens });
 });
 
-// Account stats
 app.get("/user/account", (req, res) => {
   const { username } = req.query;
   const user = findUser(username);
@@ -182,7 +168,8 @@ app.get("/user/account", (req, res) => {
   });
 });
 
-// Bet
+// BET
+
 app.post("/user/bet", (req, res) => {
   const { username, amount, game } = req.body;
   const user = findUser(username);
@@ -196,7 +183,6 @@ app.post("/user/bet", (req, res) => {
   if (amount > user.tokens)
     return res.status(400).json({ success: false, message: "Insufficient tokens." });
 
-  // Simple 50/50 for all games (you can customize per game later)
   const win = Math.random() < 0.5;
 
   if (win) {
@@ -222,7 +208,8 @@ app.post("/user/bet", (req, res) => {
   });
 });
 
-// Top up to 1000 if below
+// TOPUP
+
 app.post("/user/topup", (req, res) => {
   const { username } = req.body;
   const user = findUser(username);
@@ -242,19 +229,6 @@ app.post("/user/topup", (req, res) => {
     success: true,
     tokens: user.tokens,
     message: "You have been topped up to 1000 tokens."
-  });
-});
-
-// Request tokens (mock)
-app.post("/user/request-tokens", (req, res) => {
-  const { username, amount } = req.body;
-  const user = findUser(username);
-  if (!user)
-    return res.status(404).json({ success: false, message: "User not found." });
-
-  res.json({
-    success: true,
-    message: `Token request of ${amount || "some"} tokens received for ${username}. (Mock shop)`
   });
 });
 
