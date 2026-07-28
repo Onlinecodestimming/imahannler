@@ -22,10 +22,10 @@ app.use(
 
 app.use(express.json());
 
-// JSON file path
-const dataFilePath = path.resolve(process.env.DATA_FILE);
+// JSON file path (inside repo)
+const dataFilePath = path.resolve(process.env.DATA_FILE || "./data/users.json");
 
-// Read users
+// Helpers
 function readUsers() {
   try {
     const raw = fs.readFileSync(dataFilePath, "utf-8");
@@ -37,7 +37,6 @@ function readUsers() {
   }
 }
 
-// Write users
 function writeUsers(users) {
   try {
     fs.writeFileSync(
@@ -97,13 +96,17 @@ app.get("/owner-panel", (req, res) => {
 
   const users = readUsers();
   const totalUsers = users.length;
-  const totalTokens = users.reduce((sum, u) => sum + u.tokens, 0);
+  const totalTokens = users.reduce((sum, u) => sum + (u.tokens || 0), 0);
+  const totalWon = users.reduce((sum, u) => sum + (u.totalWon || 0), 0);
+  const totalLost = users.reduce((sum, u) => sum + (u.totalLost || 0), 0);
 
   res.json({
     success: true,
     data: {
       totalUsers,
       totalTokens,
+      totalWon,
+      totalLost,
       siteBalance: totalTokens,
       controls: [
         "Toggle maintenance mode",
@@ -122,9 +125,15 @@ app.post("/user/register", (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid username." });
 
   if (findUser(username))
-    return res.status(409).json({ success: false, message: "User exists." });
+    return res.status(409).json({ success: false, message: "User already exists." });
 
-  const newUser = { username, tokens: 1000 };
+  const newUser = {
+    username,
+    tokens: 1000,
+    totalWon: 0,
+    totalLost: 0
+  };
+
   upsertUser(newUser);
 
   res.json({ success: true, user: newUser });
@@ -138,7 +147,10 @@ app.post("/user/login", (req, res) => {
 
   const user = findUser(username);
   if (!user)
-    return res.status(404).json({ success: false, message: "User not found." });
+    return res.status(404).json({
+      success: false,
+      message: "User not found. Please sign up."
+    });
 
   res.json({ success: true, user });
 });
@@ -148,24 +160,52 @@ app.get("/user/tokens", (req, res) => {
   const { username } = req.query;
   const user = findUser(username);
   if (!user)
-    return res.status(404).json({ success: false });
+    return res.status(404).json({ success: false, message: "User not found." });
 
   res.json({ success: true, tokens: user.tokens });
 });
 
+// Account stats
+app.get("/user/account", (req, res) => {
+  const { username } = req.query;
+  const user = findUser(username);
+  if (!user)
+    return res.status(404).json({ success: false, message: "User not found." });
+
+  res.json({
+    success: true,
+    username: user.username,
+    tokens: user.tokens,
+    totalWon: user.totalWon || 0,
+    totalLost: user.totalLost || 0,
+    net: (user.totalWon || 0) - (user.totalLost || 0)
+  });
+});
+
 // Bet
 app.post("/user/bet", (req, res) => {
-  const { username, amount } = req.body;
+  const { username, amount, game } = req.body;
   const user = findUser(username);
 
   if (!user)
     return res.status(404).json({ success: false, message: "User not found." });
 
-  if (amount <= 0 || amount > user.tokens)
-    return res.status(400).json({ success: false, message: "Invalid bet." });
+  if (typeof amount !== "number" || amount <= 0)
+    return res.status(400).json({ success: false, message: "Invalid bet amount." });
 
+  if (amount > user.tokens)
+    return res.status(400).json({ success: false, message: "Insufficient tokens." });
+
+  // Simple 50/50 for all games (you can customize per game later)
   const win = Math.random() < 0.5;
-  user.tokens += win ? amount : -amount;
+
+  if (win) {
+    user.tokens += amount;
+    user.totalWon = (user.totalWon || 0) + amount;
+  } else {
+    user.tokens -= amount;
+    user.totalLost = (user.totalLost || 0) + amount;
+  }
 
   upsertUser(user);
 
@@ -173,9 +213,48 @@ app.post("/user/bet", (req, res) => {
     success: true,
     result: win ? "win" : "lose",
     tokens: user.tokens,
+    totalWon: user.totalWon,
+    totalLost: user.totalLost,
+    game: game || "generic",
     message: win
-      ? `You won ${amount} tokens!`
-      : `You lost ${amount} tokens.`
+      ? `You won ${amount} tokens on ${game || "the game"}!`
+      : `You lost ${amount} tokens on ${game || "the game"}.`
+  });
+});
+
+// Top up to 1000 if below
+app.post("/user/topup", (req, res) => {
+  const { username } = req.body;
+  const user = findUser(username);
+  if (!user)
+    return res.status(404).json({ success: false, message: "User not found." });
+
+  if (user.tokens >= 1000)
+    return res.status(400).json({
+      success: false,
+      message: "You already have 1000 or more tokens."
+    });
+
+  user.tokens = 1000;
+  upsertUser(user);
+
+  res.json({
+    success: true,
+    tokens: user.tokens,
+    message: "You have been topped up to 1000 tokens."
+  });
+});
+
+// Request tokens (mock)
+app.post("/user/request-tokens", (req, res) => {
+  const { username, amount } = req.body;
+  const user = findUser(username);
+  if (!user)
+    return res.status(404).json({ success: false, message: "User not found." });
+
+  res.json({
+    success: true,
+    message: `Token request of ${amount || "some"} tokens received for ${username}. (Mock shop)`
   });
 });
 
