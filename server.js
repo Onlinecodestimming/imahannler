@@ -23,18 +23,16 @@ app.use(
 
 app.use(express.json());
 
-// Data file (JSON-based "DB")
+// Data file
 const dataFilePath = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
   : path.join(__dirname, "data", "users.json");
 
-// Ensure data dir exists
 const dataDir = path.dirname(dataFilePath);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Helpers to read/write users
 function readUsers() {
   try {
     if (!fs.existsSync(dataFilePath)) {
@@ -77,7 +75,6 @@ function upsertUser(user) {
   writeUsers(users);
 }
 
-// Basic input validation
 function isValidUsername(username) {
   return (
     typeof username === "string" &&
@@ -86,8 +83,6 @@ function isValidUsername(username) {
     /^[a-zA-Z0-9_]+$/.test(username)
   );
 }
-
-// Routes
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Gambling backend running" });
@@ -117,7 +112,7 @@ app.post("/owner-login", (req, res) => {
     return res.json({
       success: true,
       message: "Owner access granted.",
-      token: "owner-" + username // mock token
+      token: "owner-" + username
     });
   }
 
@@ -127,7 +122,7 @@ app.post("/owner-login", (req, res) => {
   });
 });
 
-// Owner panel (mock protected)
+// Owner panel
 app.get("/owner-panel", (req, res) => {
   const { username } = req.query;
   const ownerUsername = process.env.OWNER_USERNAME;
@@ -167,7 +162,7 @@ app.get("/owner-panel", (req, res) => {
   });
 });
 
-// User registration
+// User register
 app.post("/user/register", (req, res) => {
   const { username } = req.body;
 
@@ -189,7 +184,7 @@ app.post("/user/register", (req, res) => {
 
   const newUser = {
     username,
-    tokens: 1000 // starting tokens
+    tokens: 1000
   };
 
   upsertUser(newUser);
@@ -228,7 +223,7 @@ app.post("/user/login", (req, res) => {
   });
 });
 
-// Get user tokens
+// Get tokens
 app.get("/user/tokens", (req, res) => {
   const { username } = req.query;
 
@@ -253,7 +248,7 @@ app.get("/user/tokens", (req, res) => {
   });
 });
 
-// Simple betting game
+// Bet
 app.post("/user/bet", (req, res) => {
   const { username, amount } = req.body;
 
@@ -287,7 +282,6 @@ app.post("/user/bet", (req, res) => {
     });
   }
 
-  // Simple 50/50 game: win = +amount, lose = -amount
   const win = Math.random() < 0.5;
   if (win) {
     user.tokens += amount;
@@ -307,7 +301,6 @@ app.post("/user/bet", (req, res) => {
   });
 });
 
-// Start server
 const port = process.env.PORT || 10000;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
